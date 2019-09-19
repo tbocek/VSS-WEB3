@@ -16,6 +16,7 @@
 
 <script>
     const utils = require('./utils.js')
+    const Web3 = require('web3');
 
     export default {
         data: function () {
@@ -30,13 +31,14 @@
             }
         },
         created: function () {
-            window.addEventListener('load', () => {
+            window.addEventListener('load', async () => {
                 // Checking if Web3 has been injected by the browser (Mist/MetaMask)
                 if (typeof web3 !== 'undefined') {
                     // Use Mist/MetaMask's provider
-                    this.web3 = new Web3(web3.currentProvider);
-                    const address = "0x489216292acee7097b4aa0a9bfa25e2e23d8e400";
-                    this.contract = this.web3.eth.contract([{"constant":true,"inputs":[{"name":"recipient","type":"address"},{"name":"hash","type":"bytes32"}],"name":"verify","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"hash","type":"bytes32"}],"name":"store","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"}]).at(address);
+                    this.web3 = new Web3(Web3.givenProvider);
+                    await ethereum.enable();
+                    const address = "0xc8adb8c77068315893d3066634e08706b3d5a3d4";
+                    this.contract = new this.web3.eth.Contract([{"constant":true,"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"bytes32","name":"hash","type":"bytes32"}],"name":"verify","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"bytes32","name":"hash","type":"bytes32"}],"name":"store","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"}], address);
                 } else {
                     this.status = 'No web3? You should consider trying MetaMask!'
                 }
@@ -45,15 +47,16 @@
         methods: {
             filesChange(fileList) {
                 const fr = new FileReader();
-                fr.onload = (e) => {
+                fr.onload = async (e) => {
                     this.hash = utils.stringHash(e.target.result);
                     console.log('hash is: '+this.hash)
-                    this.contract.verify(this.web3.eth.defaultAccount, this.hash, (error, result) => {
+                    const accounts = await this.web3.eth.getAccounts();
+                    this.contract.methods.verify(accounts[0], this.hash).call().then((result, error) => {
                         if(!error) {
                             if(result == 0) {
                                 this.isDisabled = false
                                 this.timestamp = 0
-                                this.status = 'not yet stored from accout: '+this.web3.eth.defaultAccount
+                                this.status = 'not yet stored from accout: ' + accounts[0]
                             } else {
                                 this.isDisabled = true
                                 this.timestamp = parseInt(result)
@@ -64,13 +67,14 @@
                             this.isDisabled = false
                             this.status = 'error: '+error
                         }
-                    });
+                    })
                 }
                 fr.readAsArrayBuffer(fileList[0]);
                 this.fileName = fileList[0].name
             },
-            store() {
-                this.contract.store(this.hash, (error, result) => {
+            async store() {
+                const accounts = await this.web3.eth.getAccounts();
+                this.contract.methods.store(this.hash).send({ from: accounts[0]}).then((result, error) => {
                     if(!error) {
                         this.status = 'stored, tx is: '+result.toString()
                     } else {
